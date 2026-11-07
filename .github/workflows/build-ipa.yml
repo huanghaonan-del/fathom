@@ -1,0 +1,138 @@
+name: Build unsigned IPA
+
+# 在 GitHub 的免费 macOS 机器上编译，产出未签名的 .ipa。
+# 未签名包不能直接装，但 AltStore / Sideloadly 会用你自己的 Apple ID 重新签名后安装。
+#
+# 用法：仓库页面 → Actions → 左侧 "Build unsigned IPA" → Run workflow
+# 跑完在页面底部 Artifacts 里下载 Fathom-unsigned-ipa。
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 新手最容易犯的两个错：①把 fathom-ios.zip 整个传了上来 ②多套了一层文件夹。
+      # 这里自动修正，省一次来回。
+      - name: 自愈：把工程摆到仓库根目录
+        run: |
+          set -u
+          if [ -f project.yml ]; then
+            echo "✅ project.yml 已在根目录"
+            exit 0
+          fi
+
+          for z in *.zip; do
+            if [ -f "$z" ]; then
+              echo "📦 发现压缩包 $z，自动解压"
+              mkdir -p .prep && unzip -q -o "$z" -d .prep || true
+            fi
+          done
+
+          src=$(find . -maxdepth 3 -name project.yml -not -path "./.git/*" -not -path "./.prep/*" | head -1)
+          if [ -z "$src" ]; then
+            src=$(find .prep -maxdepth 3 -name project.yml 2>/dev/null | head -1)
+          fi
+          if [ -z "$src" ]; then
+            echo "::error::仓库里找不到 project.yml。请确认上传的是工程内容（根目录应看到 project.yml、Fathom、Shared 等），而不是空仓库或只有一个说明文件。"
+            exit 1
+          fi
+
+          dir=$(dirname "$src")
+          echo "🔧 把 $dir 里的内容提到根目录"
+          rsync -a --exclude .git --exclude .prep "$dir"/ ./
+          test -f project.yml && echo "✅ 已就位"
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        run: |
+          xcodegen --version
+          xcodegen generate
+          ls -la
+
+      - name: 显示编译环境
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: 编译（不签名）
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Fathom.xcodeproj \
+            -scheme Fathom \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            clean build 2>&1 | tee build.log
+
+      - name: 打包成 IPA
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release-iphoneos/Fathom.app"
+          echo "检查产物：$APP"
+          test -d "$APP"
+          test -d "$APP/PlugIns" || (echo "缺少 PlugIns，扩展没有嵌进 App" && exit 1)
+          test -d "$APP/PlugIns/FathomAction.appex" || (echo "缺少 FathomAction.appex" && exit 1)
+          test -f "$APP/Assets.car" || echo "警告：没有 Assets.car（图标可能缺失）"
+
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          # 未签名包里如果残留签名文件，安装时会报签名冲突，顺手清掉
+          rm -rf Payload/Fathom.app/_CodeSignature 2>/dev/null || true
+          zip -qry Fathom-unsigned.ipa Payload
+          ls -lh Fathom-unsigned.ipa
+          unzip -l Fathom-unsigned.ipa | head -30
+
+      - name: 上传 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fathom-unsigned-ipa
+          path: Fathom-unsigned.ipa
+          if-no-files-found: error
+
+      - name: 上传 Xcode 工程（给有 Mac 的情况备用）
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fathom-xcodeproj
+          path: Fathom.xcodeproj
+          if-no-files-found: warn
+
+      - name: 编译失败时汇总错误（方便复制给 AI 排查）
+        if: failure()
+        run: |
+          echo "## 编译错误摘要" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f build.log ]; then
+            grep -E "error: |warning: .*deprecat" build.log | head -60 >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            echo "没有 build.log：失败发生在编译之前（多半是仓库里缺文件，见上面几步的输出）" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 编译失败时上传日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            build/Logs/Build/*.xcactivitylog
+          if-no-files-found: ignore

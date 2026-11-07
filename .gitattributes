@@ -1,0 +1,12 @@
+# 统一换行符，避免在 Windows 上编辑过的脚本到 macOS 上跑不起来
+* text=auto
+
+*.sh text eol=lf
+*.yml text eol=lf
+*.swift text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+
+*.png binary
+*.ipa binary
+*.xcassets binary

@@ -1,0 +1,102 @@
+# Fathom —— XcodeGen 工程描述文件
+#
+# 这个文件是「工程的事实来源」：Xcode 的 .xcodeproj 由它生成，
+# 所以不用担心 .pbxproj 冲突或手改坏掉。
+#
+# 本机（Mac）生成工程：
+#   brew install xcodegen
+#   cd fathom-ios && xcodegen generate
+#
+# 云端（GitHub Actions）也会自动生成，见 .github/workflows/build-ipa.yml
+
+name: Fathom
+
+options:
+  bundleIdPrefix: com.fathomapp
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  minimumXcodeGenVersion: "2.38.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # 留空表示「用 Xcode 里登录的任意账号」。用免费账号时不要填 Team ID，
+    # 让 Xcode 自动签名即可；付费账号可以填自己的 Team ID。
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    DEAD_CODE_STRIPPING: YES
+    SWIFT_STRICT_CONCURRENCY: minimal
+
+targets:
+  # ───────────────────────── 主 App ─────────────────────────
+  Fathom:
+    type: application
+    platform: iOS
+    sources:
+      - path: Fathom
+        excludes:
+          - "Info.plist"
+          - "Fathom.entitlements"
+      - path: Fathom/Info.plist
+        buildPhase: none
+      - path: Fathom/Fathom.entitlements
+        buildPhase: none
+      # 共享代码，同时编进 App 和扩展
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: Fathom
+        PRODUCT_BUNDLE_IDENTIFIER: com.fathomapp.fathom
+        INFOPLIST_FILE: Fathom/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Fathom/Fathom.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: FathomAction
+        embed: true
+
+  # ──────────────────── 分享菜单扩展 ────────────────────
+  FathomAction:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: FathomAction
+        excludes:
+          - "Info.plist"
+          - "FathomAction.entitlements"
+      - path: FathomAction/Info.plist
+        buildPhase: none
+      - path: FathomAction/FathomAction.entitlements
+        buildPhase: none
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: FathomAction
+        PRODUCT_BUNDLE_IDENTIFIER: com.fathomapp.fathom.action
+        INFOPLIST_FILE: FathomAction/Info.plist
+        CODE_SIGN_ENTITLEMENTS: FathomAction/FathomAction.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        GENERATE_INFOPLIST_FILE: NO
+
+schemes:
+  Fathom:
+    build:
+      targets:
+        Fathom: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+    test:
+      config: Debug
