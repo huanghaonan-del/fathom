@@ -23,8 +23,13 @@
 
 1. 先卸载：设置 → 应用 → 找到 `iTunes` / `iCloud` →（如果来源写着 Microsoft Store）卸载
 2. 装官网 iTunes：<https://www.apple.com/itunes/download/win64>
-3. 装官网 iCloud：<https://support.apple.com/zh-cn/106189>（页面上「Windows 版 iCloud」的下载按钮）
-4. 装完**先各打开一次**，确认 iTunes 能识别到你的 iPhone（手机插上后点左上角的小手机图标）
+3. 装官网 iCloud（苹果 CDN 直链，点开就开始下载 `iCloudSetup.exe`，约 200 MB）：
+   <https://updates.cdn-apple.com/2020/windows/001-39935-20200911-1A70AA56-F448-11EA-8CC0-99D41950005E/iCloudSetup.exe>
+   （Apple 官方支持页面的写法已失效，这个直链来自 AltStore 官方安装文档）
+4. 装完**先各打开一次**，并用**同一个 Apple ID** 登录：
+   iTunes → 账户 → 登录；iCloud → 登录。
+5. 在 iTunes 里确认能识别到你的 iPhone（手机插上后点左上角的小手机图标），
+   并在设备页 → 摘要 → 选项里勾上 **「通过 Wi-Fi 同步」**（7 天续签要用）。
 
 > 如果 iTunes 里看不到设备：换一根**能传数据**的线（不是只能充电的那种），
 > 手机上点「信任此电脑」，输入锁屏密码。

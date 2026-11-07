@@ -2,9 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.com.fathomapp.fathom</string>
-	</array>
+	<!--
+	  这里刻意保持为空。
+
+	  原因：免费 Apple ID 的 provisioning profile 不包含任何 App Group，
+	  而扩展一旦声明 com.apple.security.application-groups，签名后就与 profile
+	  不匹配，iOS 会拒绝注册这个分享扩展（表现就是分享面板里永远看不到 Fathom）。
+
+	  所以本项目在免费签名场景下不使用 App Group：
+	  - 主 App 与扩展各自使用自己的 UserDefaults / 沙盒目录
+	  - 扩展把结果通过 fathom://save 深链交回主 App（见 DeepLinkCodec）
+	  - 扩展第一次使用时需要单独填一次 API Key（见 ExtensionSetupView）
+
+	  如果你有付费开发者账号并想恢复 App Group 共享，在下面加回：
+	  <key>com.apple.security.application-groups</key>
+	  <array><string>group.com.fathomapp.fathom</string></array>
+	  两个 target 的 entitlements 都要加，且要在开发者后台为这两个 App ID 启用该 App Group。
+	-->
 </dict>
 </plist>

@@ -8,7 +8,7 @@ struct AnalysisPrompt {
 /// 提示词集中在这里，方便你按自己的口味调（例如换成更学术或更口语的解释）。
 enum PromptBuilder {
     private static let systemMessage = """
-    你是一名面向中文母语者的英语精读老师，熟悉 IPA 音标、英语语法体系（主谓宾、从句、非谓语等）和中英翻译。
+    你是一名英语母语者，同时是给中文母语者做精读的老师。你的解释要像母语者聊天那样直白，而不是像语法书。
     你的任务是把用户选中的英语内容解析成 JSON，供 iOS App 渲染。
 
     硬性要求：
@@ -17,6 +17,7 @@ enum PromptBuilder {
     3. 不要编造音标，不确定时留空字符串。
     4. 字段没有内容时用空字符串或空数组，不要输出 null。
     5. JSON 的 key 必须与示例完全一致，不要新增、改名或嵌套。
+    6. 站在母语者的角度说话：多讲“为什么会这么说”“母语者脑子里想的是什么”，少背术语。
     """
 
     static func make(for request: AnalysisRequest) -> AnalysisPrompt {
@@ -35,11 +36,16 @@ enum PromptBuilder {
         case .sentence:
             kindLine = "解析类型：句子。只输出 sentence 字段，不要输出 word 字段。"
             extra = """
-            - translation 要通顺、符合中文表达习惯，不要逐词硬翻。
-            - structure 拆出主句主要成分，2-5 项；role 用“主语/谓语/宾语/表语/状语/补语”等中文术语。
-            - clauses 只列真实存在的从句；没有就给空数组。
-            - keyVocabulary 给 3-6 个真正影响理解的词。
-            - grammarNotes 给 1-4 条，指出最容易卡住的地方。
+            - translation 用地道中文，保留原句的口气；原句若口语、讽刺、委婉、正式，译文也要对应。不要逐词硬翻。
+            - nativeTake 写母语者读完这句的第一反应（1-3 句）：什么口气、什么态度、有没有言外之意、通常在什么场合说。
+            - chunks 给 3-6 条，是母语者会“整块记住”的片段：常见搭配、习语、口语说法、固定句式。
+              kind 从「搭配 / 习语 / 口语 / 固定说法 / 语篇连接」里选一个；
+              note 说明为什么母语者这么说、能不能换成别的说法、语气强弱或使用场合。
+            - structure 讲“主干是怎么搭起来的”：role 用「主干-主语 / 主干-谓语 / 主干-宾语 / 修饰-状语 / 修饰-定语」这类写法，
+              不要只堆术语；note 用大白话说这一块在干什么。
+            - clauses 只列真实存在的从句；没有就给空数组。type 用中文，note 说明它在句子里起什么作用。
+            - keyVocabulary 给 3-6 个真正卡住理解的词，note 写它在这句里的具体意思（不是词条义）。
+            - grammarNotes 给 1-4 条，回答“作者为什么这么写”，而不是“这叫什么句型”。
             - difficulty 用 CEFR 等级填写（A1-C2）。
             """
         }
@@ -102,22 +108,26 @@ enum PromptBuilder {
             {
               "kind": "sentence",
               "sentence": {
-                "translation": "委员会经过数周商议，最终达成了一致，这让所有人都很意外。",
+                "translation": "委员会商议了数周，总算达成了一致。",
+                "nativeTake": "这是很典型的正式书面语，像新闻稿或会议纪要。finally 带一点「总算熬出来了」的口气，说明过程拖得久、大家都有点疲惫。",
+                "chunks": [
+                  {"text": "reach a consensus", "meaning": "达成一致", "kind": "搭配", "note": "consensus 习惯和 reach / build / forge 搭配，不说 arrive a consensus；日常口语更常说 come to an agreement。"},
+                  {"text": "after weeks of deliberation", "meaning": "经过数周商议", "kind": "固定说法", "note": "deliberation 很正式，常见于议会、陪审团、董事会；口语里会说 after weeks of talking it over。"}
+                ],
                 "structure": [
-                  {"role": "主语", "text": "The committee", "note": "名词短语作主语"},
-                  {"role": "谓语", "text": "reached", "note": "一般过去时"},
-                  {"role": "宾语", "text": "a consensus", "note": "名词短语作宾语"},
-                  {"role": "状语", "text": "finally", "note": "副词作状语"}
+                  {"role": "主干-主语", "text": "The committee", "note": "谁在做这件事；这个群体作为一个整体，谓语用单数"},
+                  {"role": "主干-谓语", "text": "reached", "note": "把「达成」这个动作说出来"},
+                  {"role": "主干-宾语", "text": "a consensus", "note": "达成的结果是什么"},
+                  {"role": "修饰-状语", "text": "after weeks of deliberation", "note": "补时间：拖了数周才成"}
                 ],
                 "clauses": [
-                  {"type": "非限制性定语从句", "text": "which had been deliberating for weeks", "note": "补充说明 the committee，用逗号隔开"},
-                  {"type": "定语从句", "text": "that surprised everyone", "note": "修饰 a consensus"}
+                  {"type": "时间状语（介词短语）", "text": "after weeks of deliberation", "note": "不是从句，只是介词短语；如实标注，不要硬说成从句"}
                 ],
                 "keyVocabulary": [
-                  {"word": "deliberate", "meaning": "v. 仔细考虑；商议", "note": "deliberate on / over sth."},
-                  {"word": "consensus", "meaning": "n. 共识；一致意见", "note": "reach a consensus 达成共识"}
+                  {"word": "consensus", "meaning": "n. 一致意见", "note": "这句里指全体都能接受的结果"},
+                  {"word": "deliberation", "meaning": "n. 商议；审议", "note": "正式词，强调反复讨论"}
                 ],
-                "grammarNotes": ["主句是 The committee reached a consensus。", "两个从句分别修饰 committee 和 consensus。"],
+                "grammarNotes": ["把时间状语挪到句末，重点就落在 reached a consensus 上，作者想让「终于达成」先被看到。", "committee 这类集体名词当作一个整体时，谓语用单数。"],
                 "difficulty": "B2"
               }
             }

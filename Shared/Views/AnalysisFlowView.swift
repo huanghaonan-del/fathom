@@ -217,9 +217,13 @@ struct AnalysisFlowView: View {
                         viewModel.saveToVocabulary(result)
                     }
                 } label: {
-                    Image(systemName: saved ? "bookmark.fill" : "bookmark")
+                    Label(saved ? "已加入" : "加入生词本",
+                          systemImage: saved ? "bookmark.fill" : "bookmark")
+                        .labelStyle(.titleAndIcon)
+                        .font(.callout)
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(saved)
                 .accessibilityLabel("存入生词本")
 

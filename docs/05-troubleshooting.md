@@ -75,6 +75,20 @@ GitHub 只认仓库根目录下的 `.github/workflows/`，套了一层之后它�
 5. **在 X 里**：X 经常只传链接不传文字，这是 X 的行为，不是本 App 的问题——用「解析」页粘贴。
 
 > 扩展出现在分享面板的**操作行（第二行）**，不是第一行的 App 图标行。滑一下就能看到。
+> iOS 26 把这一行的展开按钮叫 **「查看更多」**（一个向下箭头），不是「更多」。
+
+### C3. 试了上面所有步骤，分享面板里始终没有 Fathom
+
+这是**已知的签名问题，不是你操作错**：
+
+免费 Apple ID 的 provisioning profile 里**不能包含 App Group**。而 1.0.0 版本的两个 target 都声明了
+`com.apple.security.application-groups`，AltStore 用免费证书重签之后，扩展的 entitlement 与 profile
+不一致，iOS 就会**拒绝注册这个扩展**——应用本身能装能开，但分享面板里永远看不到它。
+
+**1.0.1 已修**：两个 entitlements 文件清空（不再声明 App Group），扩展改为
+「自己存 Key + 通过 `fathom://save` 把结果交回主 App」。代价是扩展第一次使用时要比主 App 多填一次 Key。
+
+如果你装的是 1.0.0，重新走一遍「下载 ipa → AltStore 覆盖安装」即可。
 
 ---
 

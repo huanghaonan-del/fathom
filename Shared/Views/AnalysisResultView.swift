@@ -175,8 +175,44 @@ struct SentenceResultView: View {
                 }
             }
 
+            if !sentence.nativeTake.isEmpty {
+                ResultCard(title: "母语者视角", systemImage: "text.bubble") {
+                    Text(sentence.nativeTake)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                }
+            }
+
+            if !sentence.chunks.isEmpty {
+                ResultCard(title: "语块与地道表达", systemImage: "square.on.square.dashed") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(sentence.chunks.enumerated()), id: \.offset) { _, item in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text(item.text)
+                                        .font(.callout.weight(.semibold))
+                                        .textSelection(.enabled)
+                                    if !item.kind.isEmpty {
+                                        TagLabel(text: item.kind, tint: .purple)
+                                    }
+                                }
+                                if !item.meaning.isEmpty {
+                                    Text(item.meaning)
+                                        .font(.callout)
+                                }
+                                if !item.note.isEmpty {
+                                    Text(item.note)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if !sentence.structure.isEmpty {
-                ResultCard(title: "句子结构", systemImage: "square.stack.3d.up") {
+                ResultCard(title: "主干与修饰", systemImage: "square.stack.3d.up") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(sentence.structure.enumerated()), id: \.offset) { _, item in
                             HStack(alignment: .top, spacing: 8) {

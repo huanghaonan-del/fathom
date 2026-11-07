@@ -2,9 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.com.fathomapp.fathom</string>
-	</array>
+	<!--
+	  与 FathomAction.entitlements 同样的理由：免费 Apple ID 拿不到 App Group，
+	  声明了反而会让整包签名与 profile 不匹配（iOS 会拒绝注册扩展）。
+
+	  主 App 的数据存放在自己的 Application Support 目录（见 SharedStorage），
+	  侧载场景下完全够用；有付费账号时再按需加回 App Group。
+	-->
 </dict>
 </plist>

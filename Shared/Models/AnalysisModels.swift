@@ -170,8 +170,41 @@ extension KeyVocabulary {
     }
 }
 
+/// 语块 / 地道表达：母语者会整体记下来、而不是逐词翻译的片段。
+struct ChunkItem: Codable, Hashable, Sendable {
+    /// 英文原文片段，例如 "reach a consensus"
+    var text: String = ""
+    /// 中文意思（在句中这个语境下的意思）
+    var meaning: String = ""
+    /// 类别：搭配 / 习语 / 口语 / 固定说法 / 语篇连接
+    var kind: String = ""
+    /// 为什么母语者这么说（语感、语气、能不能替换）
+    var note: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case meaning
+        case kind
+        case note
+    }
+}
+
+extension ChunkItem {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        text = container.decodeValue(.text, fallback: "")
+        meaning = container.decodeValue(.meaning, fallback: "")
+        kind = container.decodeValue(.kind, fallback: "")
+        note = container.decodeValue(.note, fallback: "")
+    }
+}
+
 struct SentenceAnalysis: Codable, Hashable, Sendable {
     var translation: String = ""
+    /// 母语者读到这句时的第一反应：口气、态度、隐含意思
+    var nativeTake: String = ""
+    /// 语块与地道表达
+    var chunks: [ChunkItem] = []
     var structure: [StructureItem] = []
     var clauses: [ClauseItem] = []
     var keyVocabulary: [KeyVocabulary] = []
@@ -180,6 +213,8 @@ struct SentenceAnalysis: Codable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case translation
+        case nativeTake
+        case chunks
         case structure
         case clauses
         case keyVocabulary
@@ -192,6 +227,8 @@ extension SentenceAnalysis {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         translation = container.decodeValue(.translation, fallback: "")
+        nativeTake = container.decodeValue(.nativeTake, fallback: "")
+        chunks = container.decodeValue(.chunks, fallback: [])
         structure = container.decodeValue(.structure, fallback: [])
         clauses = container.decodeValue(.clauses, fallback: [])
         keyVocabulary = container.decodeValue(.keyVocabulary, fallback: [])
@@ -263,6 +300,8 @@ extension AnalysisResult {
         }
         if let sentence {
             parts.append(sentence.translation)
+            parts.append(sentence.nativeTake)
+            parts.append(contentsOf: sentence.chunks.map { item in "\(item.text) \(item.meaning) \(item.note)" })
             parts.append(contentsOf: sentence.grammarNotes)
         }
         return parts.joined(separator: " ")
@@ -295,6 +334,15 @@ extension AnalysisResult {
 
         if let sentence {
             if !sentence.translation.isEmpty { lines.append("译文：\(sentence.translation)") }
+            if !sentence.nativeTake.isEmpty { lines.append("母语者视角：\(sentence.nativeTake)") }
+            if !sentence.chunks.isEmpty {
+                let chunks = sentence.chunks.map { item -> String in
+                    let kind = item.kind.isEmpty ? "" : "【\(item.kind)】"
+                    let note = item.note.isEmpty ? "" : "\n  \(item.note)"
+                    return "· \(kind)\(item.text) — \(item.meaning)\(note)"
+                }
+                lines.append("语块与地道表达：\n" + chunks.joined(separator: "\n"))
+            }
             if !sentence.structure.isEmpty {
                 let structure = sentence.structure.map { item -> String in
                     let note = item.note.isEmpty ? "" : "（\(item.note)）"
