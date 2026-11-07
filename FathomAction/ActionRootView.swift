@@ -13,27 +13,36 @@ struct ActionRootView: View {
     @State private var needsSetup = !SettingsStore.load().isConfigured
 
     var body: some View {
-        Group {
-            if needsSetup {
-                ExtensionSetupView(openURL: openURL) {
-                    needsSetup = false
-                }
-            } else if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                EmptySelectionView(onClose: onClose)
-            } else if TextNormalizer.isBareLink(text) {
-                LinkOnlyView(onClose: onClose)
-            } else {
-                AnalysisFlowView(
-                    text: text,
-                    kind: nil,
-                    vocabulary: store,
-                    autoStart: true,
-                    showsCloseButton: true,
-                    onClose: onClose,
-                    onSaveResult: SharedStorage.isUsingAppGroup ? nil : handoff
-                )
-            }
+        content
+    }
+
+    /// 不用 Group 包一层：Group 的 init(content:) 在四分支条件里会让类型推断失去上下文，
+    /// 编译器会报 "ambiguous use of 'init(content:)'"。
+    @ViewBuilder
+    private var content: some View {
+        if needsSetup {
+            ExtensionSetupView(openURL: openURL, onDone: { needsSetup = false })
+        } else if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            EmptySelectionView(onClose: onClose)
+        } else if TextNormalizer.isBareLink(text) {
+            LinkOnlyView(onClose: onClose)
+        } else {
+            AnalysisFlowView(
+                text: text,
+                kind: nil,
+                vocabulary: store,
+                autoStart: true,
+                showsCloseButton: true,
+                onClose: onClose,
+                onSaveResult: saveHandler
+            )
         }
+    }
+
+    /// 只有拿不到 App Group 时才需要回传；能共享时直接写库，不用这层。
+    private var saveHandler: ((AnalysisResult) -> Void)? {
+        guard !SharedStorage.isUsingAppGroup else { return nil }
+        return { result in handoff(result) }
     }
 
     /// 没有 App Group 时，把结果通过 URL 送回主 App 保存进生词本。
