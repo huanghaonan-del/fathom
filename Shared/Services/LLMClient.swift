@@ -32,9 +32,31 @@ struct LLMClient {
         }
     }
 
-    // MARK: - OpenAI 兼容接口（OpenAI / DeepSeek / 自建 / Ollama）
+    /// 「讲深一点」：返回一整节课。卡片解析和讲解用的是同一套鉴权与容错。
+    func lesson(for request: AnalysisRequest) async throws -> Lesson {
+        switch settings.provider {
+        case .deepL:
+            throw AnalysisError.invalidConfiguration("DeepL 只能翻译，给不了讲解。请在设置里换成 DeepSeek 或 OpenAI。")
+        case .anthropic:
+            throw AnalysisError.invalidConfiguration("深度讲解目前只支持 OpenAI / DeepSeek / 兼容接口，Claude 请先用「快速解析」。")
+        case .openAI, .deepSeek, .compatible:
+            let prompt = PromptBuilder.makeLesson(for: request)
+            let content = try await chatContent(prompt: prompt, maxTokens: 3000, timeout: 120)
+            guard let lesson = ModelOutputParser.parseLesson(content), !lesson.blocks.isEmpty else {
+                throw AnalysisError.malformedResponse(String(content.prefix(200)))
+            }
+            return lesson
+        }
+    }
 
+    // MARK: - OpenAI 兼容接口（OpenAI / DeepSeek / 自建 / Ollama）
     private func analyzeWithChatCompletions(_ request: AnalysisRequest, prompt: AnalysisPrompt) async throws -> AnalysisResult {
+        let content = try await chatContent(prompt: prompt, maxTokens: 2600)
+        return try decodeResult(from: content, request: request, engineName: settings.provider.shortName)
+    }
+
+    /// 只负责「发一次对话、拿回文本」，卡片解析和深度讲解共用。
+    private func chatContent(prompt: AnalysisPrompt, maxTokens: Int, timeout: TimeInterval = 45) async throws -> String {
         guard let baseURL = settings.resolvedBaseURL else {
             throw AnalysisError.invalidConfiguration("Base URL 不正确，请在设置里填写以 http(s):// 开头的地址。")
         }
@@ -52,7 +74,7 @@ struct LLMClient {
             "model": settings.resolvedModel,
             "temperature": 0.2,
             "stream": false,
-            "max_tokens": 1600,
+            "max_tokens": maxTokens,
             "messages": [
                 ["role": "system", "content": prompt.system],
                 ["role": "user", "content": prompt.user]
@@ -69,7 +91,7 @@ struct LLMClient {
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
-        urlRequest.timeoutInterval = 45
+        urlRequest.timeoutInterval = timeout
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if settings.requiresAPIKey {
             urlRequest.setValue("Bearer \(settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines))",
@@ -77,8 +99,7 @@ struct LLMClient {
         }
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let content = try await extractChatContentWithRetry(urlRequest)
-        return try decodeResult(from: content, request: request, engineName: settings.provider.shortName)
+        return try await extractChatContentWithRetry(urlRequest)
     }
 
     /// JSON 模式下，模型偶尔会返回纯空白内容（官方文档明确提到这一点）。
@@ -139,7 +160,7 @@ struct LLMClient {
 
         let body: [String: Any] = [
             "model": settings.resolvedModel,
-            "max_tokens": 1600,
+            "max_tokens": 2600,
             "temperature": 0.2,
             "system": prompt.system,
             "messages": [
@@ -268,6 +289,38 @@ enum ModelOutputParser {
             if let payload = decode(candidate) {
                 return payload
             }
+        }
+        return nil
+    }
+
+    static func parseLesson(_ raw: String) -> Lesson? {
+        for candidate in candidates(from: raw) {
+            if let lesson = decodeLesson(candidate) {
+                return lesson
+            }
+        }
+        return nil
+    }
+
+    static func decodeLesson(_ text: String) -> Lesson? {
+        guard let data = text.data(using: .utf8) else { return nil }
+        let decoder = JSONDecoder()
+        if let lesson = try? decoder.decode(Lesson.self, from: data), !lesson.blocks.isEmpty {
+            return lesson
+        }
+        if let envelope = try? decoder.decode(LessonEnvelope.self, from: data),
+           let lesson = envelope.lesson, !lesson.blocks.isEmpty {
+            return lesson
+        }
+
+        let sanitized = removeTrailingCommas(text)
+        guard sanitized != text, let fixed = sanitized.data(using: .utf8) else { return nil }
+        if let lesson = try? decoder.decode(Lesson.self, from: fixed), !lesson.blocks.isEmpty {
+            return lesson
+        }
+        if let envelope = try? decoder.decode(LessonEnvelope.self, from: fixed),
+           let lesson = envelope.lesson, !lesson.blocks.isEmpty {
+            return lesson
         }
         return nil
     }

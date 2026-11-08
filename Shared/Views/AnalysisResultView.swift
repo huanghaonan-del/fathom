@@ -285,11 +285,19 @@ struct SentenceResultView: View {
             }
 
             if !sentence.grammarNotes.isEmpty {
-                ResultCard(title: "语法要点", systemImage: "graduationcap") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(sentence.grammarNotes, id: \.self) { note in
-                            Text("· \(note)")
-                                .font(.callout)
+                ResultCard(title: "语法：为什么是这个形式", systemImage: "graduationcap") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(sentence.grammarNotes.enumerated()), id: \.offset) { index, note in
+                            HStack(alignment: .top, spacing: 8) {
+                                Text("\(index + 1)")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                                    .frame(width: 18, height: 18)
+                                    .background(Color.accentColor, in: Circle())
+                                Text(note)
+                                    .font(.callout)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                 }

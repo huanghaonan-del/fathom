@@ -21,8 +21,12 @@ struct DeepLinkRequest: Identifiable, Equatable {
 
         switch host {
         case "analyze", "add":
-            guard let text = items.first(where: { $0.name == "text" })?.value else { return nil }
-            let normalized = TextNormalizer.normalize(text)
+            let raw = items.first(where: { $0.name == "text" })?.value ?? ""
+            // 不带 text 时读剪贴板：这样快捷指令里只需要「打开 URL」一步。
+            let source = raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? (UIPasteboard.general.string ?? "")
+                : raw
+            let normalized = TextNormalizer.normalize(source)
             guard !normalized.isEmpty else { return nil }
             self.text = normalized
             if let mode = items.first(where: { $0.name == "mode" })?.value,
@@ -62,7 +66,7 @@ struct RootView: View {
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(2)
         }
-        .fullScreenCover(item: $deepLink) { request in
+        .sheet(item: $deepLink) { request in
             AnalysisFlowView(
                 text: request.text,
                 kind: request.kind,
@@ -71,6 +75,8 @@ struct RootView: View {
                 showsCloseButton: true,
                 onClose: { deepLink = nil }
             )
+            .presentationDetents([.fraction(0.62), .large])
+            .presentationDragIndicator(.visible)
         }
         .onOpenURL { url in
             // 扩展回传的结果：直接存进生词本，不打断当前操作。
@@ -80,8 +86,21 @@ struct RootView: View {
                 return
             }
             if let request = DeepLinkRequest(url: url) {
-                deepLink = request
+                present(request)
             }
+        }
+    }
+
+    /// 半屏已经开着时又来一次请求：先收起旧的，等收起动画结束再弹新的，
+    /// 否则 SwiftUI 会忽略这次赋值，看起来像「点了没反应」。
+    private func present(_ request: DeepLinkRequest) {
+        guard deepLink != nil else {
+            deepLink = request
+            return
+        }
+        deepLink = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            deepLink = request
         }
     }
 
@@ -99,6 +118,6 @@ struct RootView: View {
 
         let normalized = TextNormalizer.normalize(text)
         guard !normalized.isEmpty else { return }
-        deepLink = DeepLinkRequest(text: normalized, kind: TextNormalizer.guessKind(normalized))
+        present(DeepLinkRequest(text: normalized, kind: TextNormalizer.guessKind(normalized)))
     }
 }

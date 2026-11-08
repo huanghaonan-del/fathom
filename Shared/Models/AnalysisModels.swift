@@ -200,8 +200,7 @@ extension ChunkItem {
 }
 
 struct SentenceAnalysis: Codable, Hashable, Sendable {
-    var translation: String = ""
-    /// 母语者读到这句时的第一反应：口气、态度、隐含意思
+    var translation: String = ""    /// 母语者读到这句时的第一反应：口气、态度、隐含意思
     var nativeTake: String = ""
     /// 语块与地道表达
     var chunks: [ChunkItem] = []
@@ -419,3 +418,87 @@ enum AnalysisError: LocalizedError, Sendable {
         }
     }
 }
+
+// MARK: - 深度讲解（「讲深一点」）
+
+/// 讲解里的一小块内容。用固定的几种 kind，界面就不需要解析 Markdown。
+struct LessonBlock: Codable, Hashable, Sendable {
+    /// h2 / p / step / bullet / example / rowhead / row
+    var kind: String = "p"
+    /// 主要内容：h2 与 p 是中文；step 与 row 的 text 是英文片段；example 的 text 是英文例句
+    var text: String = ""
+    /// 中文补充：bullet 的中文意思、example 的中文翻译、row 的第二列
+    var zh: String = ""
+    /// row 的第三列（中文意思）
+    var note: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case text
+        case zh
+        case note
+    }
+}
+
+extension LessonBlock {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = container.decodeValue(.kind, fallback: "p")
+        text = container.decodeValue(.text, fallback: "")
+        zh = container.decodeValue(.zh, fallback: "")
+        note = container.decodeValue(.note, fallback: "")
+    }
+}
+
+/// 有些模型会把结果包一层 `{"lesson": {...}}`，两种写法都接受。
+struct LessonEnvelope: Codable, Sendable {
+    var lesson: Lesson?
+}
+
+/// 「讲深一点」返回的一整节课。
+struct Lesson: Codable, Hashable, Sendable {
+    var title: String = ""
+    var blocks: [LessonBlock] = []
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case blocks
+    }
+}
+
+extension Lesson {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = container.decodeValue(.title, fallback: "")
+        blocks = container.decodeValue(.blocks, fallback: [LessonBlock]())
+    }
+
+    /// 复制到剪贴板用的纯文本。
+    var plainText: String {
+        var lines: [String] = []
+        if !title.isEmpty { lines.append(title) }
+        for block in blocks {
+            switch block.kind {
+            case "h2":
+                lines.append("")
+                lines.append("【\(block.text)】")
+            case "step":
+                lines.append("")
+                lines.append(block.text + (block.zh.isEmpty ? "" : "（\(block.zh)）"))
+            case "bullet":
+                lines.append("· \(block.text)" + (block.zh.isEmpty ? "" : " —— \(block.zh)"))
+            case "example":
+                lines.append("  例：" + block.text)
+                if !block.zh.isEmpty { lines.append("        \(block.zh)") }
+            case "rowhead":
+                lines.append("  英语部分 | 作用 | 中文意思")
+            case "row":
+                lines.append("  \(block.text) | \(block.zh) | \(block.note)")
+            default:
+                lines.append(block.text)
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+}
+

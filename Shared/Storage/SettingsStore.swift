@@ -12,7 +12,7 @@ enum LLMProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     var displayName: String {
         switch self {
         case .deepSeek: return "DeepSeek"
-        case .openAI: return "OpenAI"
+        case .openAI: return "OpenAI（ChatGPT 接口）"
         case .anthropic: return "Claude（Anthropic）"
         case .compatible: return "兼容 OpenAI 的自建服务"
         case .deepL: return "DeepL（仅翻译）"
@@ -32,7 +32,7 @@ enum LLMProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     var defaultModel: String {
         switch self {
         case .deepSeek: return "deepseek-flash"
-        case .openAI: return "gpt-4o-mini"
+        case .openAI: return "gpt-5-mini"
         case .anthropic: return "claude-3-5-haiku-latest"
         case .compatible: return "qwen-plus"
         case .deepL: return ""
@@ -71,12 +71,23 @@ enum LLMProvider: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// 设置页模型输入框下面的提示：报 model not found 时照着换一个。
+    var modelHint: String {
+        switch self {
+        case .deepSeek: return "常用：deepseek-flash（快、便宜）、deepseek-v4-pro（更强）"
+        case .openAI: return "常用：gpt-5-mini、gpt-5。名字以 platform.openai.com/docs/models 为准"
+        case .anthropic: return "常用：claude-sonnet-4-5、claude-haiku-4-5。名字以官方文档为准"
+        case .compatible: return "填你的服务实际提供的模型名，例如 qwen-plus、kimi-k2"
+        case .deepL: return "DeepL 不用模型名，留空即可"
+        }
+    }
+
     var notes: String {
         switch self {
         case .deepSeek:
             return "中文解释质量好、价格低，国内可直接访问，推荐作为默认方案。"
         case .openAI:
-            return "结构化输出稳定，JSON 模式可用；需要能访问 OpenAI 的网络环境。"
+            return "ChatGPT 网页版和 App 的免费版没有 API，想用它得在 platform.openai.com 单独充钱（最低 5 美元）。JSON 输出最稳，解释也细；国内需要能访问 OpenAI 的网络环境。"
         case .anthropic:
             return "长句语法讲解细腻，价格高于 mini 系列；需要海外网络环境。"
         case .compatible:

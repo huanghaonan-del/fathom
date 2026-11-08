@@ -11,7 +11,8 @@ struct AnalysisService {
         self.client = LLMClient(settings: settings)
     }
 
-    func analyze(_ request: AnalysisRequest) async throws -> AnalysisResult {
+    /// 校验与归一化，卡片解析和深度讲解共用。
+    private func prepare(_ request: AnalysisRequest) throws -> AnalysisRequest {
         let text: String
         switch request.kind {
         case .word:
@@ -38,6 +39,11 @@ struct AnalysisService {
             throw AnalysisError.invalidConfiguration("服务配置不完整，请到设置里检查 Base URL 与模型名。")
         }
 
+        return normalized
+    }
+
+    func analyze(_ request: AnalysisRequest) async throws -> AnalysisResult {
+        let normalized = try prepare(request)
         let prompt = PromptBuilder.make(for: normalized)
         do {
             return try await client.analyze(normalized, prompt: prompt)
@@ -46,6 +52,12 @@ struct AnalysisService {
             // 只有「格式不对」才值得再花一次请求去修复。
             return try await client.repair(rawOutput, request: normalized)
         }
+    }
+
+    /// 「讲深一点」：另一次请求，返回一整节课。
+    func makeLesson(_ request: AnalysisRequest) async throws -> Lesson {
+        let normalized = try prepare(request)
+        return try await client.lesson(for: normalized)
     }
 }
 

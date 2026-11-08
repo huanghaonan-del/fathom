@@ -148,7 +148,7 @@ struct SettingsView: View {
         } header: {
             Text("进阶")
         } footer: {
-            Text("留空即使用默认值。换用自建服务（Ollama、LM Studio、通义、Kimi 等）时，把 Base URL 填成兼容 OpenAI 的 /v1 地址即可。")
+            Text("留空即使用默认值。模型名填错时接口会报 400/404，照着下面这行换一个即可：\n\(settings.provider.modelHint)\n换用自建服务（Ollama、LM Studio、通义、Kimi 等）时，把 Base URL 填成兼容 OpenAI 的 /v1 地址。")
         }
     }
 
@@ -207,6 +207,11 @@ struct SettingsView: View {
     private var aboutSection: some View {
         Section {
             LabeledContent("版本", value: appVersion)
+            NavigationLink {
+                DiagnosticsView()
+            } label: {
+                Label("诊断分享扩展", systemImage: "stethoscope")
+            }
             Link(destination: URL(string: "https://platform.deepseek.com/api_keys")!) {
                 Label("获取 DeepSeek API Key", systemImage: "safari")
             }
@@ -216,7 +221,7 @@ struct SettingsView: View {
         } header: {
             Text("关于")
         } footer: {
-            Text("API Key 只保存在本机（App Group 共享存储），不会上传到任何第三方服务器。\n免费开发者账号构建的 App 有效期为 7 天，到期需用 Xcode 重新安装。")
+            Text("API Key 只保存在本机（App 自己的 UserDefaults），不会上传到任何第三方服务器。\n免费开发者账号构建的 App 有效期为 7 天，到期需用 AltStore 重新签名安装。")
         }
     }
 

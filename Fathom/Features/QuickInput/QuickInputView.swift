@@ -87,6 +87,8 @@ struct QuickInputView: View {
                     showsCloseButton: true,
                     onClose: { presentFlow = false }
                 )
+                .presentationDetents([.fraction(0.62), .large])
+                .presentationDragIndicator(.visible)
             }
             .alert("已存入生词本", isPresented: $savedNotice) {
                 Button("好", role: .cancel) {}

@@ -12,6 +12,10 @@ struct AnalysisFlowView: View {
     @State private var toast: String?
     /// 走 URL 回传给主 App 保存时用，避免按钮重复点击。
     @State private var savedExternally = false
+    /// 选中的长段落默认折叠，点「展开全文」看全部。
+    @State private var isSelectionExpanded = false
+    /// 「讲深一点」的整节课，用 sheet 展示。
+    @State private var showsLesson = false
 
     private let autoStart: Bool
     private let showsCloseButton: Bool
@@ -47,6 +51,9 @@ struct AnalysisFlowView: View {
                     selectionCard
                     kindPicker
                     phaseContent
+                    if viewModel.kind == .sentence, viewModel.result != nil {
+                        lessonCTA
+                    }
                 }
                 .padding(16)
             }
@@ -77,6 +84,11 @@ struct AnalysisFlowView: View {
                 }
             }
             .sheet(isPresented: $isEditing) { editorSheet }
+            .sheet(isPresented: $showsLesson) {
+                LessonSheetView(text: viewModel.input, kind: viewModel.kind) {
+                    showsLesson = false
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let toast {
                     Text(toast)
@@ -114,13 +126,29 @@ struct AnalysisFlowView: View {
 
             Text(viewModel.input.isEmpty ? "（没有收到文字）" : viewModel.input)
                 .font(.callout)
-                .lineLimit(viewModel.isLoading ? 2 : 4)
+                .lineLimit(isSelectionExpanded ? nil : (viewModel.isLoading ? 2 : 4))
                 .textSelection(.enabled)
                 .foregroundStyle(viewModel.input.isEmpty ? .secondary : .primary)
 
-            Text("\(viewModel.input.count) 字符")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 10) {
+                Text("\(viewModel.input.count) 字符")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                if viewModel.input.count > 90 {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isSelectionExpanded.toggle()
+                        }
+                    } label: {
+                        Label(isSelectionExpanded ? "收起" : "展开全文",
+                              systemImage: isSelectionExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -175,6 +203,38 @@ struct AnalysisFlowView: View {
         case .failure(let message):
             ErrorCard(message: message, onRetry: { viewModel.retry() })
         }
+    }
+
+    // MARK: - 讲深一点
+
+    /// 卡片给的是「看懂」，「讲深一点」给的是「学会」：拆句子、比词、讲结构、讲母语者的想法。
+    private var lessonCTA: some View {
+        Button {
+            showsLesson = true
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "graduationcap.fill")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("讲深一点")
+                        .font(.subheadline.weight(.semibold))
+                    Text("拆开句子、比一比用词、讲母语者为什么这么说，最后给几句能直接套用的。约 10–25 秒。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 底部操作
