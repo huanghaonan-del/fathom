@@ -85,7 +85,12 @@ struct AnalysisFlowView: View {
             }
             .sheet(isPresented: $isEditing) { editorSheet }
             .sheet(isPresented: $showsLesson) {
-                LessonSheetView(text: viewModel.input, kind: viewModel.kind) {
+                LessonSheetView(
+                    text: viewModel.input,
+                    kind: viewModel.kind,
+                    store: viewModel.store,
+                    result: viewModel.result
+                ) {
                     showsLesson = false
                 }
             }

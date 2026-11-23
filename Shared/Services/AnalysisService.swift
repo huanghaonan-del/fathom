@@ -21,7 +21,8 @@ struct AnalysisService {
             text = request.text
         }
 
-        let normalized = AnalysisRequest(text: text, kind: request.kind, sourceHint: request.sourceHint)
+        let normalized = AnalysisRequest(text: text, kind: request.kind,
+                                         sourceHint: request.sourceHint, context: request.context)
         guard !normalized.text.isEmpty else { throw AnalysisError.emptyInput }
 
         // 只拿到链接时不要浪费一次请求去「解析」一个网址。
@@ -59,6 +60,25 @@ struct AnalysisService {
         let normalized = try prepare(request)
         return try await client.lesson(for: normalized)
     }
+
+    /// 流式版：一边生成一边把文字交回界面。
+    func streamLesson(_ request: AnalysisRequest,
+                      onDelta: @escaping @Sendable (String) -> Void) async throws -> Lesson {
+        let normalized = try prepare(request)
+        return try await client.streamLesson(for: normalized, onDelta: onDelta)
+    }
+
+    /// 就着刚才那节课追问一句。
+    func followUp(question: String, lessonText: String, sourceText: String) async throws -> String {
+        guard settings.isConfigured else {
+            if settings.requiresAPIKey,
+               settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw AnalysisError.missingAPIKey
+            }
+            throw AnalysisError.invalidConfiguration("服务配置不完整，请到设置里检查 Base URL 与模型名。")
+        }
+        return try await client.followUp(question: question, lessonText: lessonText, sourceText: sourceText)
+    }
 }
 
 /// Action Extension 与主 App 共用的解析视图状态机。
@@ -94,6 +114,9 @@ final class AnalysisViewModel {
         if case .loading = phase { return true }
         return false
     }
+
+    /// 视图若要顺手存讲解/标重点，需要拿到同一个 store 实例。
+    var store: VocabularyStore { vocabulary }
 
     var result: AnalysisResult? {
         if case .success(let result) = phase { return result }

@@ -5,6 +5,8 @@ import SwiftUI
 struct QuickInputView: View {
     let store: VocabularyStore
 
+    @Environment(\.dismiss) private var dismiss
+
     @State private var text = ""
     @State private var kind: AnalysisKind = .sentence
     @State private var presentFlow = false
@@ -64,7 +66,11 @@ struct QuickInputView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("解析")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("关闭") { dismiss() }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("清空") {
                         text = ""

@@ -28,11 +28,14 @@ struct AnalysisRequest: Sendable {
     let text: String
     let kind: AnalysisKind
     let sourceHint: String?
+    /// 用户手动补充的前后文（可选）。用来解决 which 指代谁、语气是讽刺还是认真这类问题。
+    let context: String?
 
-    init(text: String, kind: AnalysisKind, sourceHint: String? = nil) {
+    init(text: String, kind: AnalysisKind, sourceHint: String? = nil, context: String? = nil) {
         self.text = text
         self.kind = kind
         self.sourceHint = sourceHint
+        self.context = context
     }
 }
 
@@ -153,11 +156,20 @@ struct KeyVocabulary: Codable, Hashable, Sendable {
     var word: String = ""
     var meaning: String = ""
     var note: String = ""
+    /// 音标，例如 /praɪzd/
+    var phonetic: String = ""
+    /// 词性，例如 adj. / n. / v.
+    var partOfSpeech: String = ""
+    /// 这个词在别的语境里的一句英文例句（含中文）
+    var example: ExampleSentence = ExampleSentence()
 
     enum CodingKeys: String, CodingKey {
         case word
         case meaning
         case note
+        case phonetic
+        case partOfSpeech
+        case example
     }
 }
 
@@ -167,6 +179,9 @@ extension KeyVocabulary {
         word = container.decodeValue(.word, fallback: "")
         meaning = container.decodeValue(.meaning, fallback: "")
         note = container.decodeValue(.note, fallback: "")
+        phonetic = container.decodeValue(.phonetic, fallback: "")
+        partOfSpeech = container.decodeValue(.partOfSpeech, fallback: "")
+        example = container.decodeValue(.example, fallback: ExampleSentence())
     }
 }
 

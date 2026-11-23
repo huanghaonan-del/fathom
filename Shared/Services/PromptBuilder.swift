@@ -52,7 +52,10 @@ enum PromptBuilder {
             - structure 讲“主干是怎么搭起来的”：role 用「主干-主语 / 主干-谓语 / 主干-宾语 / 修饰-状语 / 修饰-定语」这类写法，
               不要只堆术语；note 用大白话说这一块在干什么。
             - clauses 只列真实存在的从句；没有就给空数组。type 用中文，note 说明它在句子里起什么作用。
-            - keyVocabulary 给 3-6 个真正卡住理解的词，note 写它在这句里的具体意思（不是词条义）。
+            - keyVocabulary 给 3-6 个真正卡住理解的词。每个词都要给：
+              word 原形（不要带词尾变化）、phonetic 音标（不确定就留空）、partOfSpeech 缩写（如 adj. / n. / v. / adv.）、
+              meaning 词典义（中文，可给 1-2 个义项）、note 它在这句里的具体意思和语气（不是抄词条）、
+              example 另写一句能体现这个词的英文例句 + 中文翻译（不要用原文这句）。
             - grammarNotes 给 1-3 条，回答「为什么用这个形式而不是别的」（时态、单复数、三单、被动、分词、比较级），并顺口说一句「美国人小时候是怎么理解这个形式的」；
               不要只报「这叫什么句型」，也不要让人背规则。
             - difficulty 用 CEFR 等级填写（A1-C2）。
@@ -100,11 +103,22 @@ enum PromptBuilder {
             kindLine = "这次要讲的是一个单词或短语。"
         }
 
+        let contextBlock: String
+        if let context = request.context?.trimmingCharacters(in: .whitespacesAndNewlines), !context.isEmpty {
+            contextBlock = """
+
+            上下文（用户在书里补的前后文，只用来判断指代和语气，不要单独讲解）：
+            <context>\(context)</context>
+            """
+        } else {
+            contextBlock = ""
+        }
+
         let user = """
         \(kindLine)
 
         待讲解的内容在 <text> 与 </text> 之间：
-        <text>\(request.text)</text>
+        <text>\(request.text)</text>\(contextBlock)
 
         输出 JSON 示例（结构必须完全一致）：
         {
@@ -165,6 +179,36 @@ enum PromptBuilder {
         return AnalysisPrompt(system: system, user: user)
     }
 
+    /// 追问：讲完之后学生还有一句想问。
+    ///
+    /// 这里刻意要纯文本——追问的答案是「老师顺口多说两句」，
+    /// 不是一节新课，套卡片结构反而更难读。
+    static func followUp(question: String, lessonText: String, sourceText: String) -> AnalysisPrompt {
+        let system = """
+        你就是刚才讲这段英文的那位老师，学生现在追问了一句。
+        直接回答问题，别再从头讲一遍。
+
+        要求：
+        1. 只输出纯文本，不要 JSON，不要 Markdown 标题或列表符号。
+        2. 最多 300 个中文字。答完就停，不要总结，不要问「你还有什么问题吗」。
+        3. 需要举例就举一句英文 + 一句中文，不要超过两例。
+        4. 中文口语，严禁翻译腔；不确定的地方就说「这个说法很少见」，不要硬编。
+        """
+
+        let lesson = String(lessonText.prefix(3000))
+        let user = """
+        原句：
+        <text>\(sourceText)</text>
+
+        你刚才的讲解（节选）：
+        <lesson>\(lesson)</lesson>
+
+        学生问：
+        <question>\(question)</question>
+        """
+        return AnalysisPrompt(system: system, user: user)
+    }
+
     /// 模型偶尔会多写解释文字，这时用一次很短的「修复」请求把内容压回 JSON。
     static func repair(rawOutput: String, request: AnalysisRequest) -> AnalysisPrompt {
         let system = """
@@ -221,9 +265,9 @@ enum PromptBuilder {
                 ],
                 "clauses": [],
                 "keyVocabulary": [
-                  {"word": "sharp", "meaning": "adj. 机灵的；敏锐的", "note": "这里不是「锋利」，是形容脑子快"},
-                  {"word": "tool", "meaning": "n. 工具", "note": "整句的比喻对象"},
-                  {"word": "shed", "meaning": "n. 棚子；工具棚", "note": "英式口语里很常见的词，院里放杂物的小屋"}
+                  {"word": "sharp", "phonetic": "/ʃɑːrp/", "partOfSpeech": "adj.", "meaning": "机灵的；敏锐的；锋利的", "note": "这里不是「锋利」，是形容脑子快", "example": {"en": "She has a sharp eye for detail.", "zh": "她对细节特别敏锐。"}},
+                  {"word": "tool", "phonetic": "/tuːl/", "partOfSpeech": "n.", "meaning": "工具；手段", "note": "整句的比喻对象，指人", "example": {"en": "Patience is the most useful tool here.", "zh": "耐心在这里是最有用的东西。"}},
+                  {"word": "shed", "phonetic": "/ʃed/", "partOfSpeech": "n.", "meaning": "棚子；工具房", "note": "英式口语里很常见的词，院里放杂物的小屋", "example": {"en": "He keeps the lawnmower in the shed.", "zh": "他把割草机放在工具棚里。"}}
                 ],
                 "grammarNotes": ["故意用最高级 the sharpest：假装在做一个客观比较，实际是委婉损人，比直接说 he is stupid 轻得多。", "整句没出现一个「笨」字，靠比喻让听的人自己得出结论，这是英语评价人时很常见的留白。"],
                 "difficulty": "B2"

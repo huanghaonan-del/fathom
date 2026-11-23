@@ -49,6 +49,39 @@ struct LLMClient {
         }
     }
 
+    /// 流式版讲解：每收到一小段就回调一次，界面可以边到边显示。
+    ///
+    /// 注意这里不在请求里加 `response_format`：模型流式输出时如果被强制 JSON，
+    /// 中途几乎没有可读的字符，用户看到的仍是转圈。让它正常写，最后再解析。
+    func streamLesson(for request: AnalysisRequest,
+                      onDelta: @escaping @Sendable (String) -> Void) async throws -> Lesson {
+        switch settings.provider {
+        case .deepL, .anthropic:
+            return try await lesson(for: request)
+        case .openAI, .deepSeek, .compatible:
+            let prompt = PromptBuilder.makeLesson(for: request)
+            let raw = try await streamContent(prompt: prompt, maxTokens: 3000, timeout: 150, onDelta: onDelta)
+            guard let lesson = ModelOutputParser.parseLesson(raw), !lesson.blocks.isEmpty else {
+                throw AnalysisError.malformedResponse(String(raw.prefix(200)))
+            }
+            return lesson
+        }
+    }
+
+    /// 追问：纯文本回答，不走 JSON。
+    func followUp(question: String, lessonText: String, sourceText: String) async throws -> String {
+        switch settings.provider {
+        case .deepL:
+            throw AnalysisError.invalidConfiguration("DeepL 只能翻译，没法回答追问。")
+        case .anthropic, .openAI, .deepSeek, .compatible:
+            let prompt = PromptBuilder.followUp(question: question, lessonText: lessonText, sourceText: sourceText)
+            let content = try await chatContent(prompt: prompt, maxTokens: 900, timeout: 90, jsonMode: false)
+            let cleaned = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { throw AnalysisError.emptyResponse }
+            return cleaned
+        }
+    }
+
     // MARK: - OpenAI 兼容接口（OpenAI / DeepSeek / 自建 / Ollama）
     private func analyzeWithChatCompletions(_ request: AnalysisRequest, prompt: AnalysisPrompt) async throws -> AnalysisResult {
         let content = try await chatContent(prompt: prompt, maxTokens: 2600)
@@ -56,37 +89,12 @@ struct LLMClient {
     }
 
     /// 只负责「发一次对话、拿回文本」，卡片解析和深度讲解共用。
-    private func chatContent(prompt: AnalysisPrompt, maxTokens: Int, timeout: TimeInterval = 45) async throws -> String {
-        guard let baseURL = settings.resolvedBaseURL else {
-            throw AnalysisError.invalidConfiguration("Base URL 不正确，请在设置里填写以 http(s):// 开头的地址。")
-        }
-        if settings.requiresAPIKey,
-           settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            throw AnalysisError.missingAPIKey
-        }
-
-        var url = baseURL
-        if !url.path.hasSuffix("/chat/completions") {
-            url = url.appendingPathComponent("chat/completions")
-        }
-
-        var body: [String: Any] = [
-            "model": settings.resolvedModel,
-            "temperature": 0.2,
-            "stream": false,
-            "max_tokens": maxTokens,
-            "messages": [
-                ["role": "system", "content": prompt.system],
-                ["role": "user", "content": prompt.user]
-            ]
-        ]
-        if settings.provider.supportsJSONMode {
+    private func chatContent(prompt: AnalysisPrompt, maxTokens: Int,
+                             timeout: TimeInterval = 45, jsonMode: Bool = true) async throws -> String {
+        let url = try chatEndpoint()
+        var body = chatBody(prompt: prompt, maxTokens: maxTokens, stream: false)
+        if jsonMode, settings.provider.supportsJSONMode {
             body["response_format"] = ["type": "json_object"]
-        }
-        // DeepSeek 默认开启思考模式，会显著拖慢返回速度。
-        // 划词场景要的是秒回，所以明确关掉思考（关掉后 temperature 才生效）。
-        if settings.provider == .deepSeek {
-            body["thinking"] = ["type": "disabled"]
         }
 
         var urlRequest = URLRequest(url: url)
@@ -100,6 +108,89 @@ struct LLMClient {
         urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         return try await extractChatContentWithRetry(urlRequest)
+    }
+
+    /// 流式：按 SSE 逐行读，把每个 delta 交回去。
+    private func streamContent(prompt: AnalysisPrompt, maxTokens: Int, timeout: TimeInterval,
+                               onDelta: @escaping @Sendable (String) -> Void) async throws -> String {
+        let url = try chatEndpoint()
+        let body = chatBody(prompt: prompt, maxTokens: maxTokens, stream: true)
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = timeout
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if settings.requiresAPIKey {
+            urlRequest.setValue("Bearer \(settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines))",
+                                forHTTPHeaderField: "Authorization")
+        }
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await session.bytes(for: urlRequest)
+        guard let http = response as? HTTPURLResponse else {
+            throw AnalysisError.network("没有收到有效响应。")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            var collected = Data()
+            for try await line in bytes.lines {
+                collected.append(contentsOf: Array(line.utf8))
+                if collected.count > 400 { break }
+            }
+            let message = String(data: collected, encoding: .utf8) ?? ""
+            throw AnalysisError.server(status: http.statusCode, message: message)
+        }
+
+        var full = ""
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data:") else { continue }
+            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            if payload == "[DONE]" { break }
+            guard let data = payload.data(using: .utf8),
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let choices = root["choices"] as? [[String: Any]],
+                  let delta = choices.first?["delta"] as? [String: Any],
+                  let piece = delta["content"] as? String,
+                  !piece.isEmpty
+            else { continue }
+            full += piece
+            onDelta(piece)
+        }
+
+        guard !full.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AnalysisError.emptyResponse
+        }
+        return full
+    }
+
+    private func chatEndpoint() throws -> URL {
+        guard let baseURL = settings.resolvedBaseURL else {
+            throw AnalysisError.invalidConfiguration("Base URL 不正确，请在设置里填写以 http(s):// 开头的地址。")
+        }
+        if settings.requiresAPIKey,
+           settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw AnalysisError.missingAPIKey
+        }
+        if baseURL.path.hasSuffix("/chat/completions") { return baseURL }
+        return baseURL.appendingPathComponent("chat/completions")
+    }
+
+    private func chatBody(prompt: AnalysisPrompt, maxTokens: Int, stream: Bool) -> [String: Any] {
+        var body: [String: Any] = [
+            "model": settings.resolvedModel,
+            "temperature": 0.2,
+            "stream": stream,
+            "max_tokens": maxTokens,
+            "messages": [
+                ["role": "system", "content": prompt.system],
+                ["role": "user", "content": prompt.user]
+            ]
+        ]
+        // DeepSeek 默认开启思考模式，会显著拖慢返回速度。
+        // 划词场景要的是秒回，所以明确关掉思考（关掉后 temperature 才生效）。
+        if settings.provider == .deepSeek {
+            body["thinking"] = ["type": "disabled"]
+        }
+        return body
     }
 
     /// JSON 模式下，模型偶尔会返回纯空白内容（官方文档明确提到这一点）。

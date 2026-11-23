@@ -42,6 +42,10 @@ struct DeepLinkRequest: Identifiable, Equatable {
     }
 }
 
+/// 只有两个标签页：库、设置。
+///
+/// 「解析」不再是独立页面——大多数输入来自分享面板和双击背面，
+/// 剩下少量粘贴走「库」右上角的按钮，弹一张半屏就够。
 struct RootView: View {
     let store: VocabularyStore
 
@@ -50,21 +54,13 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            LibraryView(
-                store: store,
-                onAnalyzeText: analyzeClipboard,
-                onOpenSettings: { selectedTab = 2 }
-            )
-                .tabItem { Label("生词本", systemImage: "book.closed") }
+            LibraryView(store: store, onAnalyzeText: analyze(_:))
+                .tabItem { Label("库", systemImage: "books.vertical") }
                 .tag(0)
-
-            QuickInputView(store: store)
-                .tabItem { Label("解析", systemImage: "text.magnifyingglass") }
-                .tag(1)
 
             SettingsView(store: store)
                 .tabItem { Label("设置", systemImage: "gearshape") }
-                .tag(2)
+                .tag(1)
         }
         .sheet(item: $deepLink) { request in
             AnalysisFlowView(
@@ -79,7 +75,7 @@ struct RootView: View {
             .presentationDragIndicator(.visible)
         }
         .onOpenURL { url in
-            // 扩展回传的结果：直接存进生词本，不打断当前操作。
+            // 扩展回传的结果：直接存进词库，不打断当前操作。
             if let result = DeepLinkCodec.result(from: url) {
                 _ = store.add(result)
                 selectedTab = 0
@@ -104,11 +100,7 @@ struct RootView: View {
         }
     }
 
-    private func analyzeClipboard() {
-        guard let text = UIPasteboard.general.string,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return }
-
+    private func analyze(_ text: String) {
         // 扩展唤起主 App 失败时，剪贴板里是一条「保存链接」，这里直接落库。
         if let result = DeepLinkCodec.result(fromPastedText: text) {
             _ = store.add(result)

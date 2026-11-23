@@ -52,7 +52,7 @@ struct AnalysisResultView: View {
                 }
             case .sentence:
                 if let sentence = result.sentence {
-                    SentenceResultView(sentence: sentence)
+                    SentenceResultView(sentence: sentence, original: result.original)
                 }
             }
 
@@ -81,6 +81,8 @@ struct WordResultView: View {
                     if !word.partOfSpeech.isEmpty {
                         TagLabel(text: word.partOfSpeech)
                     }
+                    Spacer(minLength: 0)
+                    SpeakerButton(text: word.headword)
                 }
                 if !word.phonetic.isEmpty {
                     Text(word.phonetic)
@@ -122,15 +124,19 @@ struct WordResultView: View {
                 ResultCard(title: "例句", systemImage: "quote.opening") {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array(word.examples.enumerated()), id: \.offset) { _, example in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(example.en)
-                                    .font(.callout)
-                                    .textSelection(.enabled)
-                                if !example.zh.isEmpty {
-                                    Text(example.zh)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
+                            HStack(alignment: .top, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(example.en)
+                                        .font(.callout)
+                                        .textSelection(.enabled)
+                                    if !example.zh.isEmpty {
+                                        Text(example.zh)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
+                                Spacer(minLength: 0)
+                                SpeakerButton(text: example.en, compact: true)
                             }
                         }
                     }
@@ -158,18 +164,30 @@ struct WordResultView: View {
 
 struct SentenceResultView: View {
     let sentence: SentenceAnalysis
+    var original: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if !sentence.translation.isEmpty {
                 ResultCard(title: "整句翻译", systemImage: "character.bubble") {
-                    HStack(alignment: .top, spacing: 10) {
-                        Text(sentence.translation)
-                            .font(.body)
-                            .textSelection(.enabled)
-                        Spacer(minLength: 0)
-                        if !sentence.difficulty.isEmpty {
-                            TagLabel(text: sentence.difficulty, tint: .orange)
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !original.isEmpty {
+                            HStack(spacing: 8) {
+                                Text("听原句")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 0)
+                                SpeakerButton(text: original, compact: true)
+                            }
+                        }
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(sentence.translation)
+                                .font(.body)
+                                .textSelection(.enabled)
+                            Spacer(minLength: 0)
+                            if !sentence.difficulty.isEmpty {
+                                TagLabel(text: sentence.difficulty, tint: .orange)
+                            }
                         }
                     }
                 }
@@ -195,6 +213,8 @@ struct SentenceResultView: View {
                                     if !item.kind.isEmpty {
                                         TagLabel(text: item.kind, tint: .purple)
                                     }
+                                    Spacer(minLength: 0)
+                                    SpeakerButton(text: item.text, compact: true)
                                 }
                                 if !item.meaning.isEmpty {
                                     Text(item.meaning)
@@ -260,25 +280,9 @@ struct SentenceResultView: View {
 
             if !sentence.keyVocabulary.isEmpty {
                 ResultCard(title: "难点词汇", systemImage: "bookmark") {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(sentence.keyVocabulary.enumerated()), id: \.offset) { _, item in
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 6) {
-                                    Text(item.word)
-                                        .font(.callout.weight(.semibold))
-                                        .textSelection(.enabled)
-                                    if !item.meaning.isEmpty {
-                                        Text(item.meaning)
-                                            .font(.callout)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                if !item.note.isEmpty {
-                                    Text(item.note)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                            WordRow(vocabulary: item, context: original)
                         }
                     }
                 }

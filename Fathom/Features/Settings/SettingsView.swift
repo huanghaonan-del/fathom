@@ -1,13 +1,17 @@
 import SwiftUI
+import AVFoundation
 
 struct SettingsView: View {
     let store: VocabularyStore
 
     @State private var settings = SettingsStore.load()
+    @State private var speech = SpeechSettings.load()
     @State private var testState: ConnectionTestState = .idle
     @State private var exportItem: ExportItem?
     @State private var exportError: String?
     @State private var showClearConfirm = false
+    @State private var batchSize = AppSettings.reviewBatchSize
+    @State private var collapseTranslation = AppSettings.collapseTranslation
 
     private enum ConnectionTestState: Equatable {
         case idle
@@ -26,7 +30,9 @@ struct SettingsView: View {
             Form {
                 serviceSection
                 modelSection
+                studySection
                 fallbackSection
+                speechSection
                 dataSection
                 aboutSection
             }
@@ -34,6 +40,9 @@ struct SettingsView: View {
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: settings) {
                 SettingsStore.save(settings)
+            }
+            .onChange(of: speech) {
+                SpeechSettings.save(speech)
             }
             .sheet(item: $exportItem) { item in
                 ShareFileSheet(url: item.url)
@@ -152,6 +161,30 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - 复习
+
+    private var studySection: some View {
+        Section {
+            Picker("一次复习", selection: $batchSize) {
+                Text("5 张").tag(5)
+                Text("10 张").tag(10)
+                Text("20 张").tag(20)
+            }
+            .onChange(of: batchSize) {
+                AppSettings.reviewBatchSize = batchSize
+            }
+
+            Toggle("先藏起译文", isOn: $collapseTranslation)
+                .onChange(of: collapseTranslation) {
+                    AppSettings.collapseTranslation = collapseTranslation
+                }
+        } header: {
+            Text("复习")
+        } footer: {
+            Text("打开卡片时先只显示英文，自己回想一遍再点「看译文」——这个动作才是记忆生效的地方。关掉则一进来就全摊开。")
+        }
+    }
+
     // MARK: - 离线
 
     private var fallbackSection: some View {
@@ -164,12 +197,52 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - 朗读
+
+    private var speechSection: some View {
+        Section {
+            Picker("声音", selection: $speech.voiceIdentifier) {
+                Text("自动（挑最好的）").tag("")
+                ForEach(SpeechService.americanVoices(), id: \.identifier) { voice in
+                    Text(SpeechService.displayName(voice)).tag(voice.identifier)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("语速")
+                    Spacer()
+                    Text(rateLabel)
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: $speech.rate, in: 0.35...0.55, step: 0.01)
+            }
+
+            Button {
+                SpeechService.speak("Here's the thing about sounding natural. It's not about the words. It's about the music behind them.")
+            } label: {
+                Label("试听一句", systemImage: "speaker.wave.2")
+            }
+        } header: {
+            Text("朗读")
+        } footer: {
+            Text("想听到更像真人的美式英语：去「设置 → 辅助功能 → 朗读内容 → 声音 → 英语（美国）」，下载 Ava 或 Samantha 的「高级」版（约 300 MB），回来在这里选中它。系统自带的「标准」声音就是机器人味。")
+        }
+    }
+
+    private var rateLabel: String {
+        switch speech.rate {
+        case ..<0.42: return "慢"
+        case ..<0.50: return "正常"
+        default: return "稍快"
+        }
+    }
+
     // MARK: - 数据
 
     private var dataSection: some View {
         Section {
             LabeledContent("已收录", value: "\(store.entries.count) 条")
-
             if let warning = SharedStorage.storageWarning {
                 Text(warning)
                     .font(.caption)
