@@ -52,7 +52,7 @@ struct LibraryView: View {
                     QuickInputView(store: store)
                 }
                 .sheet(item: $exportFile) { payload in
-                    ShareFileSheet(fileURL: payload.url)
+                    ShareFileSheet(url: payload.url)
                 }
                 .alert("已复制，打开 Fathom 就能存", isPresented: $showPasteHint) {
                     Button("好", role: .cancel) {}
